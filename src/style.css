@@ -15,7 +15,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 #app {
   display: grid;
-  grid-template-columns: 46px 1fr 232px;
+  grid-template-columns: 84px 1fr 232px;
   grid-template-rows: 42px 1fr auto;
   grid-template-areas: "top top top" "tools stage side" "bottom bottom bottom";
   height: 100%;
@@ -31,10 +31,10 @@ button:hover { border-color: var(--accent); }
 button:active { background: #2e333b; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.tools { grid-area: tools; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
-.tools button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; }
+.tools { grid-area: tools; display: grid; grid-template-columns: repeat(2, 34px); justify-content: center; align-content: start; gap: 4px; padding: 8px 0; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+.tools button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
 .tools button.active { background: var(--accent); border-color: var(--accent); color: #07121f; }
-.tools hr { width: 26px; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.tools hr { grid-column: 1 / -1; width: 100%; border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
 .tools svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; }
@@ -75,7 +75,7 @@ kbd, code { background: var(--panel-2); border: 1px solid var(--line); border-ra
 .tog.on { color: #07121f; background: var(--accent); border-color: var(--accent); }
 
 @media (max-width: 760px) {
-  #app { grid-template-columns: 46px 1fr; grid-template-rows: 42px 1fr auto auto; grid-template-areas: "top top" "tools stage" "side side" "bottom bottom"; }
+  #app { grid-template-columns: 84px 1fr; grid-template-rows: 42px 1fr auto auto; grid-template-areas: "top top" "tools stage" "side side" "bottom bottom"; }
   .side { max-height: 150px; border-left: 0; border-top: 1px solid var(--line); }
   .help { display: none; }
   .prompt { max-width: 45%; }

@@ -148,7 +148,11 @@ export function drawShape(ctx: CanvasRenderingContext2D, view: View, e: Shape): 
     case 'text':
       ctx.font = `${Math.max(e.h * view.scale, 1)}px "Segoe UI", system-ui, sans-serif`;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText(e.text, view.sx(e.p.x), view.sy(e.p.y));
+      ctx.save();
+      ctx.translate(view.sx(e.p.x), view.sy(e.p.y));
+      if (e.rot) ctx.rotate(-e.rot); // screen y is flipped
+      ctx.fillText(e.text, 0, 0);
+      ctx.restore();
       break;
   }
 }

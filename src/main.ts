@@ -28,14 +28,26 @@ const ICONS: Record<string, string> = {
   trim: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7.5L20 18M8 16.5L20 6"/>',
   extend: '<path d="M20 4v16"/><path d="M4 12h12M12 8l4 4-4 4"/>',
   offset: '<path d="M4 20A16 16 0 0 1 20 4"/><path d="M4 14A10 10 0 0 1 14 4"/>',
+  mirror: '<path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 7L3 17h6zM15 7l6 10h-6z"/>',
+  array: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
+  fillet: '<path d="M5 4v9a7 7 0 0 0 7 7h8"/>',
+  chamfer: '<path d="M5 4v8l8 8h7"/>',
+  dim: '<path d="M4 7v11M20 7v11M4 14h16M8 12l-4 2 4 2M16 12l4 2-4 2"/>',
+  dimal: '<path d="M5 6l-1 5M17 18l1-5M5 9l13 5M8 15l-2.5-1M16 15.5l2.5 1"/><path d="M5 8l13 5"/>',
+  dimrad: '<circle cx="10" cy="14" r="6"/><path d="M10 14l8-8M14.5 6H18v3.5"/>',
   erase: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
   measure: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
 };
 const TOOL_TITLES: Record<string, string> = {
   select: 'Select', line: 'Line (L)', polyline: 'Polyline (PL)', rect: 'Rectangle (REC)', circle: 'Circle (C)', arc: 'Arc, 3 points (A)',
-  text: 'Text (T)', move: 'Move (M)', copy: 'Copy (CO)', rotate: 'Rotate (RO)', scale: 'Scale (SC)', trim: 'Trim (TR)', extend: 'Extend (EX)', offset: 'Offset (O)', erase: 'Erase (E)', measure: 'Distance (DI)',
+  text: 'Text (T)', move: 'Move (M)', copy: 'Copy (CO)', rotate: 'Rotate (RO)', scale: 'Scale (SC)', mirror: 'Mirror (MI)', array: 'Array (AR)', fillet: 'Fillet (F)', chamfer: 'Chamfer (CHA)', dim: 'Linear dimension (DLI)', dimal: 'Aligned dimension (DAL)', dimrad: 'Radius / diameter dimension (DRA)', trim: 'Trim (TR)', extend: 'Extend (EX)', offset: 'Offset (O)', erase: 'Erase (E)', measure: 'Distance (DI)',
 };
-const GROUPS = [['select'], ['line', 'polyline', 'rect', 'circle', 'arc', 'text'], ['move', 'copy', 'rotate', 'scale', 'trim', 'extend', 'offset', 'erase'], ['measure']];
+const GROUPS = [
+  ['select'],
+  ['line', 'polyline', 'rect', 'circle', 'arc', 'text'],
+  ['move', 'copy', 'rotate', 'scale', 'mirror', 'array', 'trim', 'extend', 'offset', 'fillet', 'chamfer', 'erase'],
+  ['dim', 'dimal', 'dimrad', 'measure'],
+];
 const toolsEl = $('tools');
 GROUPS.forEach((g, i) => {
   if (i) toolsEl.appendChild(document.createElement('hr'));
@@ -55,7 +67,9 @@ const ALIASES: Record<string, string> = {
   L: 'line', LINE: 'line', PL: 'polyline', PLINE: 'polyline', POLYLINE: 'polyline',
   REC: 'rect', RECT: 'rect', RECTANG: 'rect', RECTANGLE: 'rect', C: 'circle', CIRCLE: 'circle', A: 'arc', ARC: 'arc',
   T: 'text', TEXT: 'text', DT: 'text', M: 'move', MOVE: 'move', CO: 'copy', CP: 'copy', COPY: 'copy',
-  RO: 'rotate', ROTATE: 'rotate', SC: 'scale', SCALE: 'scale', TR: 'trim', TRIM: 'trim', EX: 'extend', EXTEND: 'extend', O: 'offset', OFFSET: 'offset', E: 'erase', ERASE: 'erase', DEL: 'erase',
+  RO: 'rotate', ROTATE: 'rotate', SC: 'scale', SCALE: 'scale', MI: 'mirror', MIRROR: 'mirror', AR: 'array', ARRAY: 'array', F: 'fillet', FILLET: 'fillet', CHA: 'chamfer', CHAMFER: 'chamfer',
+  DLI: 'dim', DIM: 'dim', DIMLINEAR: 'dim', DAL: 'dimal', DIMALIGNED: 'dimal', DRA: 'dimrad', DDI: 'dimrad', DIMRADIUS: 'dimrad', DIMDIAMETER: 'dimrad',
+  TR: 'trim', TRIM: 'trim', EX: 'extend', EXTEND: 'extend', O: 'offset', OFFSET: 'offset', E: 'erase', ERASE: 'erase', DEL: 'erase',
   DI: 'measure', DIST: 'measure', MEASURE: 'measure', SEL: 'select', SELECT: 'select',
 };
 
@@ -103,6 +117,7 @@ function runCommand(text: string): void {
       app.commit();
       return app.log(`Current layer: ${arg}`);
     }
+    case 'X': case 'EXPLODE': return app.explodeSelection();
     case 'ALL': return app.selectAll();
     default:
       app.log(`Unknown command or input: "${text}"`);
@@ -397,7 +412,7 @@ function frame(): void {
 resize();
 if (app.doc.entities.length) app.zoomExtents();
 refreshUI();
-app.log('Ready. Pick a tool on the left, or type a command (L, PL, REC, C, A, T, M, CO, RO, SC, TR, EX, O, E, DI).');
+app.log('Ready. Pick a tool on the left, or type a command (L, PL, REC, C, A, T, M, CO, RO, SC, MI, AR, TR, EX, O, F, CHA, DLI, DI).');
 requestAnimationFrame(frame);
 
 // expose for debugging / tests

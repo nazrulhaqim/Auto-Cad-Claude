@@ -8,7 +8,7 @@ export type Shape =
   | { type: 'circle'; c: Pt; r: number }
   | { type: 'arc'; c: Pt; r: number; a0: number; a1: number } // CCW from a0 to a1, radians
   | { type: 'poly'; pts: Pt[]; closed: boolean }
-  | { type: 'text'; p: Pt; text: string; h: number };
+  | { type: 'text'; p: Pt; text: string; h: number; rot?: number }; // rot: CCW radians about p
 
 export type Entity = Shape & { id: number; layer: string };
 
@@ -105,8 +105,12 @@ export function bboxOf(e: Shape): BBox {
     }
     case 'poly':
       return ptsBBox(e.pts);
-    case 'text':
-      return { minx: e.p.x, miny: e.p.y, maxx: e.p.x + textWidth(e), maxy: e.p.y + e.h };
+    case 'text': {
+      const w = textWidth(e);
+      const r = e.rot ?? 0;
+      const corners = [P(0, 0), P(w, 0), P(w, e.h), P(0, e.h)].map((q) => rotatePt(P(e.p.x + q.x, e.p.y + q.y), e.p, r));
+      return ptsBBox(corners);
+    }
   }
 }
 
@@ -141,9 +145,10 @@ export function hitDistance(e: Shape, p: Pt): number {
       return Math.min(...segments(e.pts, e.closed).map(([a, b]) => distToSegment(p, a, b)));
     }
     case 'text': {
-      const b = bboxOf(e);
-      const dx = Math.max(b.minx - p.x, 0, p.x - b.maxx);
-      const dy = Math.max(b.miny - p.y, 0, p.y - b.maxy);
+      const q = rotatePt(p, e.p, -(e.rot ?? 0)); // into the text's own frame
+      const w = textWidth(e);
+      const dx = Math.max(e.p.x - q.x, 0, q.x - (e.p.x + w));
+      const dy = Math.max(e.p.y - q.y, 0, q.y - (e.p.y + e.h));
       return Math.hypot(dx, dy);
     }
   }
@@ -196,7 +201,7 @@ export function xform(e: Shape, f: (p: Pt) => Pt, rot: number, k: number): Shape
     case 'poly':
       return { ...e, pts: e.pts.map(f) };
     case 'text':
-      return { ...e, p: f(e.p), h: e.h * k };
+      return { ...e, p: f(e.p), h: e.h * k, ...(rot || e.rot ? { rot: (e.rot ?? 0) + rot } : {}) };
   }
 }
 

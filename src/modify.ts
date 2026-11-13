@@ -1,4 +1,4 @@
-import { P, TAU, angle, dist, distToSegment, normAngle, polar, segments, type Pt, type Shape } from './geometry';
+import { P, TAU, angle, dist, distToSegment, normAngle, polar, rotatePt, segments, xform, type Pt, type Shape } from './geometry';
 
 /** A geometric primitive: a straight segment, or a circle optionally limited to a CCW arc range. */
 export type Prim =
@@ -323,4 +323,122 @@ export function offsetShape(e: Shape, d: number, side: Pt): Shape | null {
     case 'text':
       return null;
   }
+}
+
+// ---------- MIRROR ----------
+/** Reflect a shape across the line through p1 and p2. Text keeps its orientation (like MIRRTEXT=0). */
+export function mirrorShape(e: Shape, p1: Pt, p2: Pt): Shape {
+  const th = angle(p1, p2);
+  const c = Math.cos(2 * th);
+  const s = Math.sin(2 * th);
+  const r = (p: Pt) => P(p1.x + (p.x - p1.x) * c + (p.y - p1.y) * s, p1.y + (p.x - p1.x) * s - (p.y - p1.y) * c);
+  switch (e.type) {
+    case 'line': return { ...e, a: r(e.a), b: r(e.b) };
+    case 'circle': return { ...e, c: r(e.c) };
+    // reflection reverses direction, so the start/end angles swap to stay CCW
+    case 'arc': return { ...e, c: r(e.c), a0: 2 * th - e.a1, a1: 2 * th - e.a0 };
+    case 'poly': return { ...e, pts: e.pts.map(r) };
+    case 'text': return { ...e, p: r(e.p) };
+  }
+}
+
+// ---------- FILLET / CHAMFER (line to line) ----------
+type LineShape = Extract<Shape, { type: 'line' }>;
+export interface CornerResult {
+  a: Shape;
+  b: Shape;
+  extra?: Shape;
+}
+
+interface Corner {
+  I: Pt;
+  u1: Pt;
+  u2: Pt;
+  E1: Pt;
+  E2: Pt;
+  theta: number;
+}
+
+function cornerOf(l1: LineShape, c1: Pt, l2: LineShape, c2: Pt): Corner | string {
+  const I = lineLine(l1.a, l1.b, l2.a, l2.b);
+  if (!I) return 'The two lines are parallel.';
+  const side = (l: LineShape, c: Pt): { u: Pt; E: Pt } | null => {
+    const len = dist(l.a, l.b);
+    if (len < EPS) return null;
+    const dir = P((l.b.x - l.a.x) / len, (l.b.y - l.a.y) / len);
+    let s = (c.x - I.x) * dir.x + (c.y - I.y) * dir.y;
+    if (Math.abs(s) < 1e-9) s = dist(l.b, I) >= dist(l.a, I) ? 1 : -1; // click on the corner itself: keep the longer side
+    const u = P(dir.x * Math.sign(s), dir.y * Math.sign(s));
+    const da = (l.a.x - I.x) * u.x + (l.a.y - I.y) * u.y;
+    const db = (l.b.x - I.x) * u.x + (l.b.y - I.y) * u.y;
+    return { u, E: da >= db ? l.a : l.b };
+  };
+  const s1 = side(l1, c1);
+  const s2 = side(l2, c2);
+  if (!s1 || !s2) return 'A line has zero length.';
+  const along = (E: Pt, u: Pt) => (E.x - I.x) * u.x + (E.y - I.y) * u.y;
+  if (along(s1.E, s1.u) <= EPS || along(s2.E, s2.u) <= EPS) return 'Pick the side of each line that faces the corner.';
+  const dot = Math.max(-1, Math.min(1, s1.u.x * s2.u.x + s1.u.y * s2.u.y));
+  const theta = Math.acos(dot);
+  if (theta < 1e-6 || theta > Math.PI - 1e-6) return 'The lines are collinear.';
+  return { I, u1: s1.u, u2: s2.u, E1: s1.E, E2: s2.E, theta };
+}
+
+const at = (I: Pt, u: Pt, t: number) => P(I.x + u.x * t, I.y + u.y * t);
+
+/** Round the corner of two lines with an arc of radius r (r = 0 just trims/extends them to meet). */
+export function filletLines(l1: LineShape, c1: Pt, l2: LineShape, c2: Pt, r: number): CornerResult | { error: string } {
+  const k = cornerOf(l1, c1, l2, c2);
+  if (typeof k === 'string') return { error: k };
+  const { I, u1, u2, E1, E2, theta } = k;
+  if (r <= 0) return { a: line(I, E1), b: line(I, E2) };
+  const t = r / Math.tan(theta / 2);
+  const along = (E: Pt, u: Pt) => (E.x - I.x) * u.x + (E.y - I.y) * u.y;
+  if (along(E1, u1) < t - 1e-9 || along(E2, u2) < t - 1e-9) return { error: 'Radius is too large for these lines.' };
+  const T1 = at(I, u1, t);
+  const T2 = at(I, u2, t);
+  const bl = Math.hypot(u1.x + u2.x, u1.y + u2.y);
+  const bis = P((u1.x + u2.x) / bl, (u1.y + u2.y) / bl);
+  const C = at(I, bis, r / Math.sin(theta / 2));
+  const ccw = cross(sub(T1, C), sub(T2, C)) > 0; // the short way round
+  const a1 = angle(C, T1);
+  const a2 = angle(C, T2);
+  const arc: Shape = ccw ? { type: 'arc', c: C, r, a0: a1, a1: a2 } : { type: 'arc', c: C, r, a0: a2, a1: a1 };
+  return { a: line(T1, E1), b: line(T2, E2), extra: arc };
+}
+
+/** Cut the corner of two lines: d1 along the first, d2 along the second. */
+export function chamferLines(l1: LineShape, c1: Pt, l2: LineShape, c2: Pt, d1: number, d2: number): CornerResult | { error: string } {
+  const k = cornerOf(l1, c1, l2, c2);
+  if (typeof k === 'string') return { error: k };
+  const { I, u1, u2, E1, E2 } = k;
+  if (d1 <= 0 && d2 <= 0) return { a: line(I, E1), b: line(I, E2) };
+  const along = (E: Pt, u: Pt) => (E.x - I.x) * u.x + (E.y - I.y) * u.y;
+  if (along(E1, u1) < d1 - 1e-9 || along(E2, u2) < d2 - 1e-9) return { error: 'Distance is too large for these lines.' };
+  const T1 = at(I, u1, d1);
+  const T2 = at(I, u2, d2);
+  return { a: line(T1, E1), b: line(T2, E2), extra: line(T1, T2) };
+}
+
+// ---------- ARRAY ----------
+export type MapFn = (s: Shape) => Shape;
+const mover = (dx: number, dy: number): MapFn => (s) => xform(s, (p) => P(p.x + dx, p.y + dy), 0, 1);
+
+/** Copies for a rows x cols grid (the original occupies cell 0,0). Spacings: +dy up, +dx right. */
+export function rectArray(rows: number, cols: number, dy: number, dx: number): MapFn[] {
+  const out: MapFn[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (r || c) out.push(mover(c * dx, r * dy));
+  return out;
+}
+
+/** Copies for `count` items around `center`; a 360° fill spaces them evenly, otherwise the last lands on the end angle. */
+export function polarArray(center: Pt, count: number, fillRad: number): MapFn[] {
+  const full = Math.abs(Math.abs(fillRad) - TAU) < 1e-6;
+  const step = full ? fillRad / count : fillRad / (count - 1);
+  const out: MapFn[] = [];
+  for (let i = 1; i < count; i++) {
+    const a = step * i;
+    out.push((s) => xform(s, (p) => rotatePt(p, center, a), a, 1));
+  }
+  return out;
 }

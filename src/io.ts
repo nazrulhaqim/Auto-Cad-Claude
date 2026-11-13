@@ -66,7 +66,8 @@ export function exportDXF(doc: Doc): string {
         g(0, 'SEQEND'); g(8, e.layer);
         break;
       case 'text':
-        g(0, 'TEXT'); g(8, e.layer); g(10, num(e.p.x)); g(20, num(e.p.y)); g(30, 0); g(40, num(e.h)); g(1, e.text);
+        g(0, 'TEXT'); g(8, e.layer); g(10, num(e.p.x)); g(20, num(e.p.y)); g(30, 0); g(40, num(e.h)); g(1, e.text.replace(/Ø/g, '%%c'));
+        if (e.rot) g(50, num(toDeg(normAngle(e.rot))));
         break;
     }
   }
@@ -176,7 +177,8 @@ export function importDXF(text: string): DxfResult {
       case 'MTEXT': {
         const raw = get(r, 1) ?? '';
         const text = raw.replace(/\\P/g, ' ').replace(/\\[A-Za-z][^;]*;/g, '').replace(/[{}]/g, '');
-        add({ type: 'text', p: P(n(r, 10), n(r, 20)), text, h: n(r, 40, 2.5) || 2.5 }, r);
+        const rot = r.type === 'TEXT' ? toRad(n(r, 50, 0)) : 0;
+        add({ type: 'text', p: P(n(r, 10), n(r, 20)), text: text.replace(/%%[cC]/g, 'Ø'), h: n(r, 40, 2.5) || 2.5, ...(rot ? { rot } : {}) }, r);
         break;
       }
       default:
@@ -230,7 +232,7 @@ export function exportSVG(doc: Doc): string {
         out.push(`<${e.closed ? 'polygon' : 'polyline'} points="${e.pts.map((p) => `${num(p.x)},${num(-p.y)}`).join(' ')}" ${style(e)}/>`);
         break;
       case 'text':
-        out.push(`<text x="${num(e.p.x)}" y="${num(-e.p.y)}" font-size="${num(e.h)}" font-family="sans-serif" fill="${doc.layer(e.layer)?.color ?? '#fff'}" stroke="none">${esc(e.text)}</text>`);
+        out.push(`<text x="${num(e.p.x)}" y="${num(-e.p.y)}"${e.rot ? ` transform="rotate(${num(-toDeg(e.rot))} ${num(e.p.x)} ${num(-e.p.y)})"` : ''} font-size="${num(e.h)}" font-family="sans-serif" fill="${doc.layer(e.layer)?.color ?? '#fff'}" stroke="none">${esc(e.text)}</text>`);
         break;
     }
   }

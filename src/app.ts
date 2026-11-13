@@ -1,7 +1,12 @@
 import { Doc, History } from './doc';
 import { View, gridStep, type DrawState } from './render';
-import { bboxOf, dist, hitDistance, snapPoints, unionBBox, xform, P, type BBox, type Entity, type Pt, type Shape, type SnapPoint } from './geometry';
+import { bboxOf, dist, hitDistance, segments, snapPoints, unionBBox, P, type BBox, type Entity, type Pt, type Shape, type SnapPoint } from './geometry';
 import { createTool, type Tool } from './tools';
+
+function stripMeta(s: Shape): Shape {
+  const { id: _i, layer: _l, ...rest } = s as Entity;
+  return rest as Shape;
+}
 
 const STORAGE_KEY = 'auto-cad-claude:drawing';
 
@@ -23,6 +28,8 @@ export class App {
   ortho = false;
   textH = 10;
   offsetDist = 10;
+  filletR = 10;
+  chamfer: [number, number] = [10, 10];
 
   /** UI refresh hook (panels, prompt, toggles) */
   onChange: () => void = () => {};
@@ -74,8 +81,7 @@ export class App {
     this.doc.remove(new Set([id]));
     this.sel.delete(id);
     for (const s of shapes) {
-      const { id: _i, layer: _l, ...rest } = s as Entity;
-      this.doc.add(rest as Shape, old.layer);
+      this.doc.add(stripMeta(s), old.layer);
     }
     this.commit();
   }
@@ -99,17 +105,47 @@ export class App {
     this.commit();
   }
 
-  transformSelected(f: (p: Pt) => Pt, rot: number, k: number, copy: boolean): void {
-    const next = new Set<number>();
+  /** Apply fn to every selected entity, in place or as copies (originals stay selected). One undo step. */
+  mapSelected(fn: (s: Shape) => Shape, copy: boolean): void {
     for (const e of this.selected()) {
-      const s = xform(e, f, rot, k);
-      if (copy) {
-        const { id: _id, layer: _layer, ...rest } = s as Entity;
-        next.add(this.doc.add(rest as Shape, e.layer).id);
-      } else this.doc.update(e.id, s);
+      const s = fn(e);
+      if (copy) this.doc.add(stripMeta(s), e.layer);
+      else this.doc.update(e.id, s);
     }
-    if (copy) this.sel = next;
     this.commit();
+  }
+
+  /** Add several copies of the selection (ARRAY). One undo step. */
+  addCopies(fns: ((s: Shape) => Shape)[]): number {
+    const src = this.selected();
+    for (const fn of fns) for (const e of src) this.doc.add(stripMeta(fn(e)), e.layer);
+    this.commit();
+    return fns.length * src.length;
+  }
+
+  /** Add shapes on a (possibly new) layer as one undo step. */
+  addShapes(shapes: Shape[], layer: string, color?: string): void {
+    this.doc.ensureLayer(layer, color);
+    for (const s of shapes) this.doc.add(s, layer);
+    this.commit();
+  }
+
+  /** Break selected polylines into separate lines. */
+  explodeSelection(): void {
+    const next = new Set<number>();
+    let n = 0;
+    for (const e of this.selected()) {
+      if (e.type !== 'poly') {
+        next.add(e.id);
+        continue;
+      }
+      this.doc.remove(new Set([e.id]));
+      for (const [a, b] of segments(e.pts, e.closed)) next.add(this.doc.add({ type: 'line', a, b }, e.layer).id);
+      n++;
+    }
+    this.sel = next;
+    this.log(n ? `${n} polyline(s) exploded into lines.` : 'Select polylines first (EXPLODE only affects polylines).');
+    if (n) this.commit();
   }
 
   setSelectionLayer(name: string): void {
