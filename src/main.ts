@@ -25,14 +25,16 @@ const ICONS: Record<string, string> = {
   copy: '<rect x="8" y="8" width="12" height="12"/><path d="M4 16V4h12"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5"/>',
   scale: '<path d="M4 20L20 4M14 4h6v6M10 20H4v-6"/>',
+  trim: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7.5L20 18M8 16.5L20 6"/>',
+  offset: '<path d="M4 20A16 16 0 0 1 20 4"/><path d="M4 14A10 10 0 0 1 14 4"/>',
   erase: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
   measure: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
 };
 const TOOL_TITLES: Record<string, string> = {
   select: 'Select', line: 'Line (L)', polyline: 'Polyline (PL)', rect: 'Rectangle (REC)', circle: 'Circle (C)', arc: 'Arc, 3 points (A)',
-  text: 'Text (T)', move: 'Move (M)', copy: 'Copy (CO)', rotate: 'Rotate (RO)', scale: 'Scale (SC)', erase: 'Erase (E)', measure: 'Distance (DI)',
+  text: 'Text (T)', move: 'Move (M)', copy: 'Copy (CO)', rotate: 'Rotate (RO)', scale: 'Scale (SC)', trim: 'Trim (TR)', offset: 'Offset (O)', erase: 'Erase (E)', measure: 'Distance (DI)',
 };
-const GROUPS = [['select'], ['line', 'polyline', 'rect', 'circle', 'arc', 'text'], ['move', 'copy', 'rotate', 'scale', 'erase'], ['measure']];
+const GROUPS = [['select'], ['line', 'polyline', 'rect', 'circle', 'arc', 'text'], ['move', 'copy', 'rotate', 'scale', 'trim', 'offset', 'erase'], ['measure']];
 const toolsEl = $('tools');
 GROUPS.forEach((g, i) => {
   if (i) toolsEl.appendChild(document.createElement('hr'));
@@ -52,7 +54,7 @@ const ALIASES: Record<string, string> = {
   L: 'line', LINE: 'line', PL: 'polyline', PLINE: 'polyline', POLYLINE: 'polyline',
   REC: 'rect', RECT: 'rect', RECTANG: 'rect', RECTANGLE: 'rect', C: 'circle', CIRCLE: 'circle', A: 'arc', ARC: 'arc',
   T: 'text', TEXT: 'text', DT: 'text', M: 'move', MOVE: 'move', CO: 'copy', CP: 'copy', COPY: 'copy',
-  RO: 'rotate', ROTATE: 'rotate', SC: 'scale', SCALE: 'scale', E: 'erase', ERASE: 'erase', DEL: 'erase',
+  RO: 'rotate', ROTATE: 'rotate', SC: 'scale', SCALE: 'scale', TR: 'trim', TRIM: 'trim', O: 'offset', OFFSET: 'offset', E: 'erase', ERASE: 'erase', DEL: 'erase',
   DI: 'measure', DIST: 'measure', MEASURE: 'measure', SEL: 'select', SELECT: 'select',
 };
 
@@ -394,7 +396,7 @@ function frame(): void {
 resize();
 if (app.doc.entities.length) app.zoomExtents();
 refreshUI();
-app.log('Ready. Pick a tool on the left, or type a command (L, PL, REC, C, A, T, M, CO, RO, SC, E, DI).');
+app.log('Ready. Pick a tool on the left, or type a command (L, PL, REC, C, A, T, M, CO, RO, SC, TR, O, E, DI).');
 requestAnimationFrame(frame);
 
 // expose for debugging / tests

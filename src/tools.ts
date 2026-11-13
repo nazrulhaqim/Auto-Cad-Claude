@@ -1,4 +1,5 @@
 import type { App } from './app';
+import { offsetShape, trimEntity } from './modify';
 import { P, angle, arcFrom3, dist, polar, rotatePt, toDeg, toRad, xform, type Pt, type Shape } from './geometry';
 
 export interface Tool {
@@ -79,7 +80,7 @@ class SelectTool extends BaseTool {
   click() {}
   enter() {}
   prompt() {
-    return 'Click or drag to select. Type a command: L, PL, REC, C, A, T, M, CO, RO, SC, E, DI';
+    return 'Click or drag to select. Type a command: L, PL, REC, C, A, T, M, CO, RO, SC, TR, O, E, DI';
   }
 }
 
@@ -519,7 +520,102 @@ class EraseTool extends BaseTool {
   }
 }
 
-export const TOOL_IDS = ['select', 'line', 'polyline', 'rect', 'circle', 'arc', 'text', 'move', 'copy', 'rotate', 'scale', 'erase', 'measure'] as const;
+
+class TrimTool extends BaseTool {
+  id = 'trim';
+  click() {
+    // use the raw (unsnapped) cursor: the click must land on the part to remove
+    const raw = this.app.raw;
+    const e = this.app.pickEntity(raw);
+    if (!e) return;
+    const others = this.app.doc.entities.filter((o) => o.id !== e.id && this.app.doc.isVisible(o));
+    const res = trimEntity(e, raw, others);
+    if (!res) {
+      this.app.log('Nothing to trim there: no other object crosses it (a full circle needs two crossings).');
+      return;
+    }
+    this.app.replaceEntity(e.id, res);
+  }
+  prompt() {
+    return 'TRIM  Click the part of an object to remove (all objects are cutting edges). Enter to finish:';
+  }
+}
+
+class OffsetTool extends BaseTool {
+  id = 'offset';
+  stage = 0; // 0 = distance, 1 = pick object, 2 = pick side
+  dp: Pt | null = null;
+  entId = 0;
+  begin() {
+    this.stage = 0;
+    this.dp = null;
+    this.entId = 0;
+    this.app.sel.clear();
+  }
+  private setDistance(d: number) {
+    this.app.offsetDist = d;
+    this.dp = null;
+    this.stage = 1;
+    this.app.log(`Offset distance = ${d}`);
+    this.app.changed();
+  }
+  click(p: Pt) {
+    if (this.stage === 0) {
+      if (!this.dp) {
+        this.dp = p;
+        this.app.changed();
+      } else if (dist(this.dp, p) > 0) this.setDistance(dist(this.dp, p));
+    } else if (this.stage === 1) {
+      const e = this.app.pickEntity(this.app.raw);
+      if (!e) return;
+      if (e.type === 'text') return this.app.log('Text cannot be offset.');
+      this.entId = e.id;
+      this.app.sel = new Set([e.id]);
+      this.stage = 2;
+      this.app.changed();
+    } else {
+      const e = this.app.doc.byId(this.entId);
+      const s = e && offsetShape(e, this.app.offsetDist, this.app.raw);
+      if (!s) this.app.log('Cannot offset that way (result would be empty).');
+      else {
+        this.app.addShape(s, e!.layer);
+      }
+      this.app.sel.clear();
+      this.stage = 1;
+      this.app.changed();
+    }
+  }
+  enter() {
+    if (this.stage === 0) this.setDistance(this.app.offsetDist);
+    else this.app.setTool('select');
+  }
+  input(s: string) {
+    if (this.stage === 2) return false;
+    const d = parseNumber(s);
+    if (d !== null && d > 0) {
+      this.setDistance(d);
+      return true;
+    }
+    return false;
+  }
+  base() {
+    return this.stage === 0 ? this.dp : null;
+  }
+  preview(): Shape[] {
+    if (this.stage === 0 && this.dp) return [{ type: 'line', a: this.dp, b: this.cur }];
+    if (this.stage !== 2) return [];
+    const e = this.app.doc.byId(this.entId);
+    const s = e && offsetShape(e, this.app.offsetDist, this.app.raw);
+    return s ? [s] : [];
+  }
+  prompt() {
+    if (this.stage === 0) return `OFFSET  Distance <${this.app.offsetDist}> (type a number, click two points, or Enter):`;
+    if (this.stage === 1) return `OFFSET  Click the object to offset (distance ${this.app.offsetDist}; type a number to change):`;
+    return 'OFFSET  Click the side to offset towards:';
+  }
+}
+
+export const TOOL_IDS = ['select', 'line', 'polyline', 'rect', 'circle', 'arc', 'text', 'move', 'copy', 'rotate', 'scale', 'trim', 'offset', 'erase', 'measure'] as const;
 export type ToolId = (typeof TOOL_IDS)[number];
 
 export function createTool(id: string, app: App): Tool {
@@ -534,6 +630,8 @@ export function createTool(id: string, app: App): Tool {
     case 'copy': return new CopyTool(app);
     case 'rotate': return new RotateTool(app);
     case 'scale': return new ScaleTool(app);
+    case 'trim': return new TrimTool(app);
+    case 'offset': return new OffsetTool(app);
     case 'erase': return new EraseTool(app);
     case 'measure': return new MeasureTool(app);
     default: return new SelectTool(app);

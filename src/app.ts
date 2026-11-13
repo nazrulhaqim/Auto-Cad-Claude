@@ -22,6 +22,7 @@ export class App {
   osnap = true;
   ortho = false;
   textH = 10;
+  offsetDist = 10;
 
   /** UI refresh hook (panels, prompt, toggles) */
   onChange: () => void = () => {};
@@ -59,11 +60,24 @@ export class App {
   }
 
   // ---------- document mutation ----------
-  addShape(s: Shape): Entity {
-    const e = this.doc.add(s);
+  addShape(s: Shape, layer?: string): Entity {
+    const e = this.doc.add(s, layer);
     this.history.push();
     this.save();
     return e;
+  }
+
+  /** Replace one entity by zero or more shapes on the same layer (used by TRIM). */
+  replaceEntity(id: number, shapes: Shape[]): void {
+    const old = this.doc.byId(id);
+    if (!old) return;
+    this.doc.remove(new Set([id]));
+    this.sel.delete(id);
+    for (const s of shapes) {
+      const { id: _i, layer: _l, ...rest } = s as Entity;
+      this.doc.add(rest as Shape, old.layer);
+    }
+    this.commit();
   }
 
   commit(): void {
@@ -211,10 +225,10 @@ export class App {
     return this.doc.isVisible(e) && !this.doc.isLocked(e);
   }
 
-  selectAt(p: Pt, additive: boolean): void {
-    const tol = 8 / this.view.scale;
+  /** Nearest selectable entity within a few pixels of p. */
+  pickEntity(p: Pt): Entity | null {
     let best: Entity | null = null;
-    let bd = tol;
+    let bd = 8 / this.view.scale;
     for (const e of this.doc.entities) {
       if (!this.selectable(e)) continue;
       const d = hitDistance(e, p);
@@ -223,6 +237,11 @@ export class App {
         best = e;
       }
     }
+    return best;
+  }
+
+  selectAt(p: Pt, additive: boolean): void {
+    const best = this.pickEntity(p);
     if (!additive) this.sel.clear();
     if (best) {
       if (additive && this.sel.has(best.id)) this.sel.delete(best.id);
