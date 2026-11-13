@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto-Cad-Claude</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">Auto<span>CAD</span> Claude</div>
+        <div class="group">
+          <button data-act="new" title="New drawing">New</button>
+          <button data-act="open" title="Open .json or .dxf">Open</button>
+          <button data-act="save" title="Save as .json (Ctrl+S)">Save</button>
+        </div>
+        <div class="group">
+          <button data-act="dxf" title="Export DXF">DXF</button>
+          <button data-act="svg" title="Export SVG">SVG</button>
+          <button data-act="png" title="Export PNG">PNG</button>
+        </div>
+        <div class="group">
+          <button data-act="undo" title="Undo (Ctrl+Z)">Undo</button>
+          <button data-act="redo" title="Redo (Ctrl+Y)">Redo</button>
+          <button data-act="zoomext" title="Zoom to extents (ZE)">Fit</button>
+        </div>
+        <input type="file" id="file" accept=".json,.dxf" hidden />
+      </header>
+
+      <nav class="tools" id="tools"></nav>
+
+      <main class="stage" id="stage">
+        <canvas id="cv"></canvas>
+      </main>
+
+      <aside class="side">
+        <section>
+          <h3>Layers <button class="mini" id="addLayer" title="Add layer">+</button></h3>
+          <ul id="layers"></ul>
+        </section>
+        <section>
+          <h3>Properties</h3>
+          <div id="props" class="props"></div>
+        </section>
+        <section class="help">
+          <h3>Shortcuts</h3>
+          <p><kbd>F3</kbd> object snap · <kbd>F7</kbd> grid · <kbd>F8</kbd> ortho · <kbd>F9</kbd> grid snap</p>
+          <p>Wheel = zoom · middle-drag / <kbd>Alt</kbd>+drag = pan · right-click / <kbd>Space</kbd> = Enter</p>
+          <p>Type coordinates: <code>10,20</code> · <code>@5,0</code> · <code>50&lt;45</code></p>
+        </section>
+      </aside>
+
+      <footer class="bottom">
+        <div class="log" id="log"></div>
+        <div class="cmdrow">
+          <span id="prompt" class="prompt"></span>
+          <input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Command…" />
+        </div>
+        <div class="status">
+          <span id="coords" class="coords">0.0000, 0.0000</span>
+          <span id="delta" class="delta"></span>
+          <span class="spacer"></span>
+          <button class="tog" data-tog="osnap">OSNAP</button>
+          <button class="tog" data-tog="gridSnap">SNAP</button>
+          <button class="tog" data-tog="grid">GRID</button>
+          <button class="tog" data-tog="ortho">ORTHO</button>
+        </div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
