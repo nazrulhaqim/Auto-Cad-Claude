@@ -1,4 +1,4 @@
-import { P, TAU, angle, dist, distToSegment, normAngle, segments, type Pt, type Shape } from './geometry';
+import { P, TAU, angle, dist, distToSegment, normAngle, polar, segments, type Pt, type Shape } from './geometry';
 
 /** A geometric primitive: a straight segment, or a circle optionally limited to a CCW arc range. */
 export type Prim =
@@ -171,6 +171,83 @@ export function trimEntity(e: Shape, click: Pt, others: Shape[]): Shape[] | null
   const pieces = trimSimple(line(segs[best][0], segs[best][1]), click, [...edges, ...selfEdges]);
   if (!pieces) return null;
   return segs.flatMap(([a, b], i) => (i === best ? pieces : [line(a, b)]));
+}
+
+
+// ---------- EXTEND ----------
+const RAY = 1e6;
+
+/** Where a ray leaving `from` in unit direction `u` first hits an edge (beyond `from`), or null. */
+function rayHit(from: Pt, u: Pt, edges: Prim[]): Pt | null {
+  const ray: Prim = { k: 'seg', a: from, b: P(from.x + u.x * RAY, from.y + u.y * RAY) };
+  let best: Pt | null = null;
+  let bt = Infinity;
+  for (const e of edges) {
+    for (const h of intersect(ray, e)) {
+      const t = (h.x - from.x) * u.x + (h.y - from.y) * u.y;
+      if (t > 1e-7 && t < bt) {
+        bt = t;
+        best = h;
+      }
+    }
+  }
+  return best;
+}
+
+function extendEnd(a: Pt, b: Pt, click: Pt, edges: Prim[]): { a: Pt; b: Pt } | null {
+  // extend whichever end is nearer the click, along the line's own direction
+  const atB = dist(click, b) <= dist(click, a);
+  const [far, end] = atB ? [a, b] : [b, a];
+  const len = dist(far, end);
+  if (len < EPS) return null;
+  const hit = rayHit(end, P((end.x - far.x) / len, (end.y - far.y) / len), edges);
+  if (!hit) return null;
+  return atB ? { a, b: hit } : { a: hit, b };
+}
+
+/**
+ * Extend the end of `e` nearest `click` until it meets another object (all others are
+ * boundary edges). Supports lines, arcs and open polylines (its end segment is extended).
+ * Returns the replacement shape, or null if there is nothing to extend to.
+ */
+export function extendEntity(e: Shape, click: Pt, others: Shape[]): Shape | null {
+  const edges = others.flatMap(primitives);
+  switch (e.type) {
+    case 'line': {
+      const r = extendEnd(e.a, e.b, click, edges);
+      return r ? { ...e, a: r.a, b: r.b } : null;
+    }
+    case 'poly': {
+      if (e.closed || e.pts.length < 2) return null;
+      const n = e.pts.length;
+      const atEnd = dist(click, e.pts[n - 1]) <= dist(click, e.pts[0]);
+      const [i, j] = atEnd ? [n - 2, n - 1] : [1, 0]; // j is the vertex that moves
+      // pass the moving vertex as the click so extendEnd always lengthens its `b` end
+      const r = extendEnd(e.pts[i], e.pts[j], e.pts[j], edges);
+      if (!r) return null;
+      const pts = e.pts.slice();
+      pts[j] = r.b;
+      return { ...e, pts };
+    }
+    case 'arc': {
+      const span = normAngle(e.a1 - e.a0);
+      const atEnd = dist(click, polar(e.c, e.a1, e.r)) <= dist(click, polar(e.c, e.a0, e.r));
+      const full: Prim = { k: 'circ', c: e.c, r: e.r };
+      let best = Infinity;
+      for (const o of edges) {
+        for (const h of intersect(full, o)) {
+          const ha = angle(e.c, h);
+          const delta = atEnd ? normAngle(ha - e.a1) : normAngle(e.a0 - ha);
+          // must lie beyond the end, and not wrap back into the existing arc
+          if (delta > 1e-7 && delta < TAU - span - 1e-7 && delta < best) best = delta;
+        }
+      }
+      if (!isFinite(best)) return null;
+      return atEnd ? { ...e, a1: e.a1 + best } : { ...e, a0: e.a0 - best };
+    }
+    default:
+      return null;
+  }
 }
 
 // ---------- OFFSET ----------

@@ -1,5 +1,5 @@
 import type { App } from './app';
-import { offsetShape, trimEntity } from './modify';
+import { extendEntity, offsetShape, trimEntity } from './modify';
 import { P, angle, arcFrom3, dist, polar, rotatePt, toDeg, toRad, xform, type Pt, type Shape } from './geometry';
 
 export interface Tool {
@@ -80,7 +80,7 @@ class SelectTool extends BaseTool {
   click() {}
   enter() {}
   prompt() {
-    return 'Click or drag to select. Type a command: L, PL, REC, C, A, T, M, CO, RO, SC, TR, O, E, DI';
+    return 'Click or drag to select. Type a command: L, PL, REC, C, A, T, M, CO, RO, SC, TR, EX, O, E, DI';
   }
 }
 
@@ -541,6 +541,25 @@ class TrimTool extends BaseTool {
   }
 }
 
+class ExtendTool extends BaseTool {
+  id = 'extend';
+  click() {
+    const raw = this.app.raw;
+    const e = this.app.pickEntity(raw);
+    if (!e) return;
+    const others = this.app.doc.entities.filter((o) => o.id !== e.id && this.app.doc.isVisible(o));
+    const res = extendEntity(e, raw, others);
+    if (!res) {
+      this.app.log('Nothing to extend to: no object lies beyond that end (only lines, arcs and open polylines extend).');
+      return;
+    }
+    this.app.replaceEntity(e.id, [res]);
+  }
+  prompt() {
+    return 'EXTEND  Click an object near the end to extend (all objects are boundaries). Enter to finish:';
+  }
+}
+
 class OffsetTool extends BaseTool {
   id = 'offset';
   stage = 0; // 0 = distance, 1 = pick object, 2 = pick side
@@ -615,7 +634,7 @@ class OffsetTool extends BaseTool {
   }
 }
 
-export const TOOL_IDS = ['select', 'line', 'polyline', 'rect', 'circle', 'arc', 'text', 'move', 'copy', 'rotate', 'scale', 'trim', 'offset', 'erase', 'measure'] as const;
+export const TOOL_IDS = ['select', 'line', 'polyline', 'rect', 'circle', 'arc', 'text', 'move', 'copy', 'rotate', 'scale', 'trim', 'extend', 'offset', 'erase', 'measure'] as const;
 export type ToolId = (typeof TOOL_IDS)[number];
 
 export function createTool(id: string, app: App): Tool {
@@ -631,6 +650,7 @@ export function createTool(id: string, app: App): Tool {
     case 'rotate': return new RotateTool(app);
     case 'scale': return new ScaleTool(app);
     case 'trim': return new TrimTool(app);
+    case 'extend': return new ExtendTool(app);
     case 'offset': return new OffsetTool(app);
     case 'erase': return new EraseTool(app);
     case 'measure': return new MeasureTool(app);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { P, normAngle, type Shape } from '../src/geometry';
-import { intersect, offsetShape, primitives, trimEntity } from '../src/modify';
+import { extendEntity, intersect, offsetShape, primitives, trimEntity } from '../src/modify';
 
 const line = (x1: number, y1: number, x2: number, y2: number): Shape => ({ type: 'line', a: P(x1, y1), b: P(x2, y2) });
 const asLine = (s: Shape) => {
@@ -123,5 +123,50 @@ describe('offset', () => {
   it('rejects zero distance and text', () => {
     expect(offsetShape(line(0, 0, 1, 0), 0, P(0, 1))).toBeNull();
     expect(offsetShape({ type: 'text', p: P(0, 0), text: 'x', h: 1 }, 1, P(0, 1))).toBeNull();
+  });
+});
+
+describe('extend', () => {
+  it('extends the nearer end of a line to the first boundary', () => {
+    const r = asLine(extendEntity(line(0, 0, 4, 0), P(3.5, 0), [line(10, -5, 10, 5), line(7, -5, 7, 5)])!);
+    expect(r.a.x).toBeCloseTo(0);
+    expect(r.b.x).toBeCloseTo(7); // nearest boundary, not the one at x=10
+  });
+  it('extends the start when that end is clicked', () => {
+    const r = asLine(extendEntity(line(0, 0, 4, 0), P(0.2, 0), [line(-3, -5, -3, 5)])!);
+    expect(r.a.x).toBeCloseTo(-3);
+    expect(r.b.x).toBeCloseTo(4);
+  });
+  it('ignores boundaries behind the end and returns null', () => {
+    expect(extendEntity(line(0, 0, 4, 0), P(4, 0), [line(-3, -5, -3, 5)])).toBeNull();
+    expect(extendEntity(line(0, 0, 4, 0), P(4, 0), [line(10, 1, 10, 5)])).toBeNull(); // boundary doesn't reach the line's axis
+  });
+  it('extends to a circle', () => {
+    const r = asLine(extendEntity(line(0, 0, 1, 0), P(1, 0), [{ type: 'circle', c: P(10, 0), r: 3 }])!);
+    expect(r.b.x).toBeCloseTo(7);
+  });
+  it('extends an arc along its circle', () => {
+    const arc: Shape = { type: 'arc', c: P(0, 0), r: 5, a0: 0, a1: Math.PI / 4 };
+    const r = extendEntity(arc, P(3.5, 3.5), [line(0, 0, 0, 10)])!;
+    if (r.type !== 'arc') throw new Error();
+    expect(r.a1).toBeCloseTo(Math.PI / 2);
+    expect(r.a0).toBe(0);
+    expect(extendEntity(arc, P(3.5, 3.5), [line(20, 0, 20, 10)])).toBeNull();
+  });
+  it('moves the end vertex of an open polyline', () => {
+    const pl: Shape = { type: 'poly', pts: [P(0, 0), P(5, 0), P(5, 3)], closed: false };
+    const r = extendEntity(pl, P(5, 3), [line(0, 8, 10, 8)])!;
+    if (r.type !== 'poly') throw new Error();
+    expect(r.pts[2].x).toBeCloseTo(5);
+    expect(r.pts[2].y).toBeCloseTo(8);
+    expect(r.pts).toHaveLength(3);
+    const start = extendEntity(pl, P(0, 0), [line(-4, -3, -4, 3)])!;
+    if (start.type !== 'poly') throw new Error();
+    expect(start.pts[0].x).toBeCloseTo(-4);
+  });
+  it('does not extend closed polylines, circles or text', () => {
+    const edge = line(-50, 20, 50, 20);
+    expect(extendEntity({ type: 'poly', pts: [P(0, 0), P(1, 0), P(1, 1)], closed: true }, P(1, 1), [edge])).toBeNull();
+    expect(extendEntity({ type: 'circle', c: P(0, 0), r: 1 }, P(1, 0), [edge])).toBeNull();
   });
 });
